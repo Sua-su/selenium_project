@@ -1,0 +1,26 @@
+.category-select {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.category-select label {
+  font-size: 16px;
+  color: #333;
+}
+
+.category-select select {
+  padding: 8px 16px;
+  font-size: 16px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: white;
+  cursor: pointer;
+  min-width: 150px;
+}
+
+.category-select select:focus {
+  outline: none;
+  border-color: #3498db;
+}

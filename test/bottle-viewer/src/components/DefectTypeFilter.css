@@ -1,0 +1,25 @@
+.defect-type-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.defect-type-filter label {
+  font-size: 14px;
+  color: #666;
+}
+
+.defect-type-filter select {
+  padding: 6px 12px;
+  font-size: 14px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: white;
+  cursor: pointer;
+  min-width: 150px;
+}
+
+.defect-type-filter select:focus {
+  outline: none;
+  border-color: #3498db;
+}
