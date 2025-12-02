@@ -19,7 +19,7 @@ def build_executable():
     options = [
         main_script,
         '--name=RSS_Crawler',
-        '--onefile',  # 단일 실행 파일
+        # '--onefile',  # 단일 실행 파일
         '--windowed',  # 콘솔 창 숨김 (GUI 애플리케이션)
         '--clean',
         '--noconfirm',
@@ -31,17 +31,14 @@ def build_executable():
         # '--add-data=data:data',  # macOS/Linux
     ]
     
+    
     # macOS용 추가 옵션
     if sys.platform == 'darwin':
-        options.extend([
-            '--icon=NONE',  # 아이콘 파일이 있다면 경로 지정
-        ])
+        pass
     
     # Windows용 추가 옵션
     elif sys.platform == 'win32':
-        options.extend([
-            '--icon=NONE',  # 아이콘 파일이 있다면 경로 지정
-        ])
+        pass
     
     print("=" * 60)
     print("RSS Crawler 빌드 시작...")
