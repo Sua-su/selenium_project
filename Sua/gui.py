@@ -6,9 +6,10 @@ tkinter 기반 사용자 인터페이스
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from database import DatabaseManager
 from rss_parser import RSSParser, SAMPLE_RSS_FEEDS
-from crawler import WebCrawler
+from hybrid_crawler import HybridCrawler
 
 
 class CrawlerGUI:
@@ -113,11 +114,11 @@ class CrawlerGUI:
         options_frame.pack(fill="x", pady=5)
         
         ttk.Label(options_frame, text="대기 시간(초):").pack(side="left")
-        self.wait_time_var = tk.StringVar(value="3")
+        self.wait_time_var = tk.StringVar(value="0.5")
         ttk.Entry(options_frame, textvariable=self.wait_time_var, width=10).pack(side="left", padx=5)
         
         ttk.Label(options_frame, text="요청 간격(초):").pack(side="left", padx=(20, 0))
-        self.delay_var = tk.StringVar(value="2.0")
+        self.delay_var = tk.StringVar(value="0")
         ttk.Entry(options_frame, textvariable=self.delay_var, width=10).pack(side="left", padx=5)
         
         self.crawl_btn = ttk.Button(crawl_frame, text="크롤링 시작", command=self.start_crawling)
@@ -247,10 +248,12 @@ class CrawlerGUI:
             try:
                 all_articles = self.rss_parser.parse_multiple_feeds(SAMPLE_RSS_FEEDS)
                 
-                for article in all_articles:
-                    self.root.after(0, lambda url=article['url']: self.url_listbox.insert(tk.END, url))
-                
-                self.root.after(0, lambda count=len(all_articles): self.log(f"샘플 피드 파싱 완료: {count}개 URL 추가"))
+                if all_articles:
+                    for article in all_articles:
+                        self.root.after(0, lambda url=article['url']: self.url_listbox.insert(tk.END, url))
+                    self.root.after(0, lambda count=len(all_articles): self.log(f"샘플 피드 파싱 완료: {count}개 URL 추가"))
+                else:
+                    self.root.after(0, lambda: self.log("샘플 피드 파싱 실패: 유효한 기사가 없거나 모든 피드에 접근할 수 없음"))
             except Exception as e:
                 self.root.after(0, lambda e=e: self.log(f"샘플 피드 파싱 오류: {str(e)}"))
         
@@ -303,56 +306,77 @@ class CrawlerGUI:
         self.progress_bar["value"] = 0
         
         def crawl_thread():
-            self.crawler = WebCrawler(headless=True)
             success_count = 0
+            successful_articles = []  # 배치 저장을 위한 리스트
             
             try:
-                self.crawler.init_driver()
+                # 병렬 처리를 위한 함수
+                def crawl_single(url_info):
+                    index, url = url_info
+                    result = HybridCrawler(headless=True).crawl_article(url, wait_time)
+                    return index, result
                 
-                for i, url in enumerate(urls, 1):
-                    # GUI 업데이트는 메인 스레드에서 실행
-                    self.root.after(0, lambda i=i: self.progress_label.config(text=f"진행 중: {i}/{url_count}"))
-                    self.root.after(0, lambda i=i, u=url: self.log(f"[{i}/{url_count}] 크롤링: {u}"))
+                # URL을 인덱스와 함께 묶음
+                url_with_index = [(i, url) for i, url in enumerate(urls, 1)]
+                
+                # ThreadPoolExecutor로 병렬 처리 (최대 8개 워커)
+                with ThreadPoolExecutor(max_workers=8) as executor:
+                    # 모든 작업 제출
+                    future_to_index = {
+                        executor.submit(crawl_single, url_info): url_info[0] 
+                        for url_info in url_with_index
+                    }
                     
-                    result = self.crawler.crawl_article(url, wait_time)
-                    
-                    if result.get('success'):
-                        # 데이터베이스에 저장
-                        saved = self.db.insert_article(
-                            url=result['url'],
-                            title=result.get('title'),
-                            content=result.get('content'),
-                            author=result.get('author'),
-                            published_date=result.get('published_date'),
-                            source=result.get('source')
-                        )
+                    # 완료된 작업 순서로 처리
+                    for future in as_completed(future_to_index):
+                        index, result = future.result()
                         
-                        if saved:
+                        # GUI 업데이트 (배치 업데이트로 성능 향상)
+                        if index % 5 == 0 or index == url_count:  # 5개마다 또는 마지막에 업데이트
+                            self.root.after(0, lambda i=index: self.progress_label.config(text=f"진행 중: {i}/{url_count}"))
+                            self.root.after(0, lambda i=index, u=result['url']: self.log(f"[{i}/{url_count}] 크롤링: {u}"))
+                        
+                        if result.get('success'):
+                            # 배치 저장을 위해 리스트에 추가
+                            successful_articles.append({
+                                'url': result['url'],
+                                'title': result.get('title', ''),
+                                'content': result.get('content', ''),
+                                'author': result.get('author', ''),
+                                'published_date': result.get('published_date', ''),
+                                'source': result.get('source', ''),
+                                'rss_feed': '',
+                                'tags': ''
+                            })
+                            
                             success_count += 1
+                            method = result.get('method', 'unknown')
                             title = result.get('title', 'No title')[:50]
-                            self.root.after(0, lambda t=title: self.log(f"✓ 저장 완료: {t}"))
+                            self.root.after(0, lambda t=title, m=method: self.log(f"✓ {m}: {t}"))
                         else:
-                            self.root.after(0, lambda: self.log(f"⚠ 이미 존재하는 URL"))
-                    else:
-                        error = result.get('error', 'Unknown error')
-                        self.root.after(0, lambda e=error: self.log(f"✗ 크롤링 실패: {e}"))
-                    
-                    self.root.after(0, lambda i=i: self.progress_bar.config(value=i))
-                    
-                    if i < url_count:
-                        import time
-                        time.sleep(delay)
+                            error = result.get('error', 'Unknown error')
+                            method = result.get('method', 'unknown')
+                            self.root.after(0, lambda e=error, m=method: self.log(f"✗ {m} 실패: {e}"))
+                        
+                        self.root.after(0, lambda i=index: self.progress_bar.config(value=i))
+                
+            except Exception as e:
+                self.root.after(0, lambda e=e: self.log(f"크롤링 중 오류 발생: {str(e)}"))
                 
             except Exception as e:
                 self.root.after(0, lambda e=e: self.log(f"크롤링 중 오류 발생: {str(e)}"))
                 
             finally:
-                if self.crawler:
-                    self.crawler.close_driver()
                 self.is_crawling = False
                 self.root.after(0, lambda: self.crawl_btn.config(state="normal"))
-                self.root.after(0, lambda s=success_count: self.progress_label.config(text=f"완료: {s}/{url_count}개 저장"))
-                self.root.after(0, lambda s=success_count: self.log(f"크롤링 완료: 총 {s}개 기사 저장"))
+                
+                # 배치 저장
+                if successful_articles:
+                    batch_saved = self.db.batch_insert_articles(successful_articles)
+                    self.root.after(0, lambda b=batch_saved: self.log(f"배치 저장 완료: {b}개 기사"))
+                
+                self.root.after(0, lambda s=success_count: self.progress_label.config(text=f"완료: {s}/{url_count}개 크롤링"))
+                self.root.after(0, lambda s=success_count: self.log(f"크롤링 완료: 총 {s}개 기사 수집"))
                 
                 # 데이터 확인 탭 새로고침
                 self.root.after(0, self.load_articles)

@@ -4,6 +4,7 @@ RSS 피드에서 기사 URL과 메타데이터를 추출합니다.
 """
 
 import feedparser
+import requests
 from typing import List, Dict
 from datetime import datetime
 import time
@@ -14,7 +15,10 @@ class RSSParser:
     
     def __init__(self):
         """RSS 파서 초기화"""
-        pass
+        # User-Agent 설정
+        self.headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
     
     def parse_feed(self, rss_url: str) -> List[Dict]:
         """RSS 피드 파싱
@@ -26,7 +30,31 @@ class RSSParser:
             파싱된 기사 목록
         """
         try:
-            feed = feedparser.parse(rss_url)
+            # 먼저 requests로 HTTP 상태 확인
+            response = requests.get(rss_url, headers=self.headers, timeout=10, allow_redirects=True)
+            
+            if response.status_code != 200:
+                print(f"HTTP 오류: {response.status_code} - {rss_url}")
+                return []
+            
+            # Content-Type 확인
+            content_type = response.headers.get('content-type', '').lower()
+            if 'xml' not in content_type and 'rss' not in content_type:
+                print(f"잘못된 Content-Type: {content_type} - {rss_url}")
+                return []
+            
+            # feedparser로 파싱
+            feed = feedparser.parse(response.content)
+            
+            # Bozo flag 확인 (파싱 오류)
+            if feed.bozo:
+                print(f"RSS 파싱 오류: {feed.bozo_exception} - {rss_url}")
+                # 계속 진행하지만 경고 표시
+            
+            # entries가 없는 경우
+            if not hasattr(feed, 'entries') or len(feed.entries) == 0:
+                print(f"기사가 없음: {rss_url}")
+                return []
             
             articles = []
             for entry in feed.entries:
@@ -46,8 +74,11 @@ class RSSParser:
             
             return articles
         
+        except requests.exceptions.RequestException as e:
+            print(f"네트워크 오류: {str(e)} - {rss_url}")
+            return []
         except Exception as e:
-            print(f"RSS 파싱 오류: {str(e)}")
+            print(f"RSS 파싱 오류: {str(e)} - {rss_url}")
             return []
     
     def parse_multiple_feeds(self, rss_urls: List[str]) -> List[Dict]:
@@ -64,7 +95,11 @@ class RSSParser:
         for rss_url in rss_urls:
             print(f"RSS 파싱 중: {rss_url}")
             articles = self.parse_feed(rss_url)
-            all_articles.extend(articles)
+            if articles:
+                all_articles.extend(articles)
+                print(f"  ✓ {len(articles)}개 기사 수집")
+            else:
+                print(f"  ✗ 실패 또는 기사 없음")
             time.sleep(1)  # 서버 부하 방지
         
         return all_articles
@@ -141,6 +176,5 @@ class RSSParser:
 # 주요 한국 뉴스 RSS 피드 예시
 SAMPLE_RSS_FEEDS = [
     "https://www.hani.co.kr/rss/",  # 한겨레
-    "https://rss.joins.com/joins_news_list.xml",  # 중앙일보
     "https://www.mk.co.kr/rss/30000001/",  # 매일경제
 ]

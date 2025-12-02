@@ -9,6 +9,7 @@ __pycache__/
 venv/
 env/
 ENV/
+.venv
 
 # PyInstaller 빌드 파일
 build/
