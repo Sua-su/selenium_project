@@ -1,8 +1,10 @@
 """
-Selenium + trafilatura 크롤러 모듈
-동적 웹페이지를 렌더링하고 본문을 추출합니다.
+하이브리드 크롤러 모듈
+requests + trafilatura (정적 페이지) + Selenium (동적 페이지)
 """
 
+import requests
+import trafilatura
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -10,55 +12,72 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
-import trafilatura
+from typing import Optional, Dict, List
 import time
-from typing import Optional, Dict
+import re
+from urllib.parse import urlparse
+from cache_manager import get_cache_manager, skip_if_crawled
 
 
-class WebCrawler:
-    """Selenium + trafilatura 웹 크롤러 클래스"""
+class HybridCrawler:
+    """하이브리드 크롤러: 정적 페이지는 requests, 동적 페이지는 Selenium"""
     
     def __init__(self, headless: bool = True):
-        """크롤러 초기화
-        
-        Args:
-            headless: 헤드리스 모드 사용 여부
-        """
+        """크롤러 초기화"""
         self.headless = headless
         self.driver = None
+        
+        # requests 세션 설정
+        self.session = requests.Session()
+        self.session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36'
+        })
+        
+        # 정적 페이지로 판단할 도메인 패턴
+        self.static_patterns = [
+            r'.*\.hani\.co\.kr',
+            r'.*\.mk\.co\.kr',
+            r'.*\.chosun\.com',
+            r'.*\.joongang\.co\.kr',
+            r'.*\.hankyung\.com',
+            r'.*\.news1\.kr',
+            r'.*\.yonhapnews\.com'
+        ]
+    
+    def is_static_page(self, url: str) -> bool:
+        """정적 페이지인지 확인"""
+        domain = urlparse(url).netloc
+        for pattern in self.static_patterns:
+            if re.match(pattern, domain):
+                return True
+        return False
     
     def init_driver(self):
-        """Selenium 드라이버 초기화"""
+        """Selenium 드라이버 초기화 (동적 페이지용)"""
         if self.driver is not None:
             return
         
         chrome_options = Options()
         
         if self.headless:
-            chrome_options.add_argument('--headless=new')  # 최신 헤드리스 모드
+            chrome_options.add_argument('--headless=new')
         
-        # Linux 환경에서 필수적인 옵션들
+        # Linux 환경 최적화
         chrome_options.add_argument('--no-sandbox')
         chrome_options.add_argument('--disable-dev-shm-usage')
         chrome_options.add_argument('--disable-gpu')
         chrome_options.add_argument('--disable-extensions')
         chrome_options.add_argument('--disable-plugins')
         chrome_options.add_argument('--disable-images')
-        chrome_options.add_argument('--disable-javascript')
-        chrome_options.add_argument('--disable-css')
         chrome_options.add_argument('--disable-web-security')
         chrome_options.add_argument('--allow-running-insecure-content')
         chrome_options.add_argument('--disable-features=VizDisplayCompositor')
         chrome_options.add_argument('--disable-ipc-flooding-protection')
-        
-        # DevToolsActivePort 오류 해결을 위한 추가 옵션
         chrome_options.add_argument('--remote-debugging-port=9222')
         chrome_options.add_argument('--disable-background-timer-throttling')
         chrome_options.add_argument('--disable-backgrounding-occluded-windows')
         chrome_options.add_argument('--disable-renderer-backgrounding')
         chrome_options.add_argument('--disable-background-networking')
-        
-        # 자동화 탐지 회피
         chrome_options.add_argument('--disable-blink-features=AutomationControlled')
         chrome_options.add_argument('--disable-logging')
         chrome_options.add_argument('--log-level=3')
@@ -66,16 +85,13 @@ class WebCrawler:
         
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
         chrome_options.add_experimental_option('useAutomationExtension', False)
-        
-        # 페이지 로딩 전략
-        chrome_options.page_load_strategy = 'normal'
+        chrome_options.page_load_strategy = 'eager'  # interactive보다 빠름
         
         try:
-            # 시스템 chromedriver 사용 (Chromium 142용)
             service = Service(executable_path='/home/kajj8808/bin/chromedriver')
             self.driver = webdriver.Chrome(service=service, options=chrome_options)
             
-# 자동화 탐지 우회
+            # 자동화 탐지 우회
             try:
                 self.driver.execute_cdp_cmd('Network.setUserAgentOverride', {
                     "userAgent": 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36'
@@ -85,11 +101,10 @@ class WebCrawler:
                 print(f"CDP 명령 실행 실패 (무시 가능): {str(e)}")
             
             # 타임아웃 설정
-            self.driver.set_page_load_timeout(30)
+            self.driver.set_page_load_timeout(15)
             
         except Exception as e:
             print(f"드라이버 초기화 오류: {str(e)}")
-            print("Chrome 브라우저가 설치되어 있는지 확인하세요.")
             raise
     
     def close_driver(self):
@@ -98,16 +113,32 @@ class WebCrawler:
             self.driver.quit()
             self.driver = None
     
-    def get_page_html(self, url: str, wait_time: int = 3) -> Optional[str]:
-        """페이지 HTML 가져오기 (JavaScript 렌더링 포함)
+    def get_static_html(self, url: str, timeout: int = 10) -> Optional[str]:
+        """requests로 정적 페이지 HTML 가져오기"""
+        max_retries = 2
         
-        Args:
-            url: 크롤링할 URL
-            wait_time: 페이지 로딩 대기 시간 (초)
-            
-        Returns:
-            렌더링된 HTML 또는 None
-        """
+        for attempt in range(max_retries):
+            try:
+                response = self.session.get(url, timeout=timeout, allow_redirects=True)
+                
+                if response.status_code == 200:
+                    return response.text
+                else:
+                    print(f"HTTP 오류: {response.status_code} - {url}")
+                    if attempt < max_retries - 1:
+                        time.sleep(1)
+                        continue
+                    return None
+                    
+            except Exception as e:
+                print(f"정적 페이지 로딩 오류 (시도 {attempt + 1}/{max_retries}): {str(e)}")
+                if attempt < max_retries - 1:
+                    time.sleep(1)
+                    continue
+                return None
+    
+    def get_dynamic_html(self, url: str, wait_time: int = 1) -> Optional[str]:
+        """Selenium으로 동적 페이지 HTML 가져오기"""
         max_retries = 2
         
         for attempt in range(max_retries):
@@ -122,29 +153,29 @@ class WebCrawler:
                     EC.presence_of_element_located((By.TAG_NAME, "body"))
                 )
                 
-                # 추가 대기 (동적 콘텐츠 로딩)
+                # 적응적 대기: 페이지 로딩 상태 확인
+                try:
+                    WebDriverWait(self.driver, 5).until(
+                        lambda d: d.execute_script("return document.readyState") == "complete"
+                    )
+                except:
+                    pass  # 타임아웃되어도 계속 진행
+                
+                # 최소 대기 시간
                 time.sleep(wait_time)
                 
                 html = self.driver.page_source
                 return html
             
             except Exception as e:
-                print(f"페이지 로딩 오류 (시도 {attempt + 1}/{max_retries}): {str(e)}")
+                print(f"동적 페이지 로딩 오류 (시도 {attempt + 1}/{max_retries}): {str(e)}")
                 if attempt < max_retries - 1:
-                    time.sleep(2)  # 재시도 전 대기
+                    time.sleep(2)
                     continue
                 return None
     
     def extract_content(self, html: str, url: str = None) -> Dict:
-        """trafilatura로 본문 추출
-        
-        Args:
-            html: HTML 소스
-            url: 원본 URL (선택)
-            
-        Returns:
-            추출된 콘텐츠 딕셔너리
-        """
+        """trafilatura로 본문 추출"""
         try:
             # trafilatura로 본문 추출
             content = trafilatura.extract(
@@ -180,26 +211,43 @@ class WebCrawler:
                 'sitename': ''
             }
     
-    def crawl_article(self, url: str, wait_time: int = 3) -> Dict:
-        """기사 크롤링 (Selenium + trafilatura)
-        
-        Args:
-            url: 크롤링할 기사 URL
-            wait_time: 페이지 로딩 대기 시간
-            
-        Returns:
-            추출된 기사 정보
-        """
+    @skip_if_crawled
+    def crawl_article(self, url: str, wait_time: int = 1) -> Dict:
+        """하이브리드 기사 크롤링 (캐싱 적용)"""
         print(f"크롤링 중: {url}")
         
-        # 1단계: Selenium으로 동적 페이지 렌더링
-        html = self.get_page_html(url, wait_time)
+        # 캐시된 HTML 확인
+        cache = get_cache_manager()
+        cached_html = cache.get_cached_html(url)
+        
+        if cached_html:
+            print("  캐시된 HTML 사용")
+            html = cached_html
+            method = "cached"
+        else:
+            # 정적/동적 페이지 판단
+            is_static = self.is_static_page(url)
+            crawler_type = "정적(requests)" if is_static else "동적(Selenium)"
+            print(f"  {crawler_type} 페이지로 판단")
+            
+            # 1단계: HTML 가져오기
+            if is_static:
+                html = self.get_static_html(url)
+                method = "requests"
+            else:
+                html = self.get_dynamic_html(url, wait_time)
+                method = "selenium"
+            
+            # 성공한 경우 HTML 캐싱
+            if html:
+                cache.cache_html(url, html)
         
         if not html:
             return {
                 'url': url,
                 'success': False,
-                'error': '페이지 로딩 실패'
+                'error': f'페이지 로딩 실패 ({method})',
+                'method': method
             }
         
         # 2단계: trafilatura로 본문 추출
@@ -210,7 +258,8 @@ class WebCrawler:
             return {
                 'url': url,
                 'success': False,
-                'error': '본문 추출 실패 또는 콘텐츠 부족'
+                'error': '본문 추출 실패 또는 콘텐츠 부족',
+                'method': method
             }
         
         return {
@@ -221,25 +270,20 @@ class WebCrawler:
             'author': extracted['author'],
             'published_date': extracted['date'],
             'source': extracted['sitename'],
-            'description': extracted['description']
+            'description': extracted['description'],
+            'method': method
         }
     
-    def crawl_multiple_articles(self, urls: list, wait_time: int = 3, delay: float = 2.0) -> list:
-        """여러 기사 일괄 크롤링
-        
-        Args:
-            urls: 크롤링할 URL 리스트
-            wait_time: 각 페이지 로딩 대기 시간
-            delay: 요청 간 지연 시간
-            
-        Returns:
-            크롤링 결과 리스트
-        """
+    def crawl_multiple_articles(self, urls: List[str], wait_time: int = 1, delay: float = 0.5) -> List[Dict]:
+        """여러 기사 일괄 크롤링 (순차적)"""
         results = []
         
-        try:
+        # 필요한 경우에만 드라이버 초기화
+        has_dynamic = any(not self.is_static_page(url) for url in urls)
+        if has_dynamic:
             self.init_driver()
-            
+        
+        try:
             for i, url in enumerate(urls, 1):
                 print(f"진행중: {i}/{len(urls)}")
                 result = self.crawl_article(url, wait_time)
@@ -254,11 +298,16 @@ class WebCrawler:
         
         return results
     
+    def close(self):
+        """리소스 정리"""
+        self.close_driver()
+        if self.session:
+            self.session.close()
+    
     def __enter__(self):
         """컨텍스트 매니저 진입"""
-        self.init_driver()
         return self
     
     def __exit__(self, exc_type, exc_val, exc_tb):
         """컨텍스트 매니저 종료"""
-        self.close_driver()
+        self.close()
