@@ -114,7 +114,7 @@ class CrawlerGUI:
         options_frame.pack(fill="x", pady=5)
         
         ttk.Label(options_frame, text="대기 시간(초):").pack(side="left")
-        self.wait_time_var = tk.StringVar(value="0.5")
+        self.wait_time_var = tk.StringVar(value="1")
         ttk.Entry(options_frame, textvariable=self.wait_time_var, width=10).pack(side="left", padx=5)
         
         ttk.Label(options_frame, text="요청 간격(초):").pack(side="left", padx=(20, 0))
@@ -297,7 +297,7 @@ class CrawlerGUI:
             wait_time = int(self.wait_time_var.get())
             delay = float(self.delay_var.get())
         except ValueError:
-            messagebox.showerror("오류", "대기 시간과 요청 간격은 숫자여야 합니다.")
+            messagebox.showerror("오류", "대기 시간과 요청 간격은 정수여야 합니다.")
             return
         
         self.is_crawling = True
@@ -319,8 +319,8 @@ class CrawlerGUI:
                 # URL을 인덱스와 함께 묶음
                 url_with_index = [(i, url) for i, url in enumerate(urls, 1)]
                 
-                # ThreadPoolExecutor로 병렬 처리 (최대 8개 워커)
-                with ThreadPoolExecutor(max_workers=8) as executor:
+                # ThreadPoolExecutor로 병렬 처리 (최대 4개 워커로 조정)
+                with ThreadPoolExecutor(max_workers=4) as executor:
                     # 모든 작업 제출
                     future_to_index = {
                         executor.submit(crawl_single, url_info): url_info[0] 

@@ -12,6 +12,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 import trafilatura
 import time
+import platform
 from typing import Optional, Dict
 
 
@@ -37,26 +38,29 @@ class WebCrawler:
         if self.headless:
             chrome_options.add_argument('--headless=new')  # 최신 헤드리스 모드
         
-        # Linux 환경에서 필수적인 옵션들
-        chrome_options.add_argument('--no-sandbox')
-        chrome_options.add_argument('--disable-dev-shm-usage')
+        # 공통 옵션 (모든 플랫폼)
         chrome_options.add_argument('--disable-gpu')
         chrome_options.add_argument('--disable-extensions')
         chrome_options.add_argument('--disable-plugins')
         chrome_options.add_argument('--disable-images')
-        chrome_options.add_argument('--disable-javascript')
-        chrome_options.add_argument('--disable-css')
         chrome_options.add_argument('--disable-web-security')
         chrome_options.add_argument('--allow-running-insecure-content')
         chrome_options.add_argument('--disable-features=VizDisplayCompositor')
         chrome_options.add_argument('--disable-ipc-flooding-protection')
-        
-        # DevToolsActivePort 오류 해결을 위한 추가 옵션
-        chrome_options.add_argument('--remote-debugging-port=9222')
         chrome_options.add_argument('--disable-background-timer-throttling')
         chrome_options.add_argument('--disable-backgrounding-occluded-windows')
         chrome_options.add_argument('--disable-renderer-backgrounding')
         chrome_options.add_argument('--disable-background-networking')
+        
+        # 플랫폼별 옵션
+        system = platform.system().lower()
+        if system == 'linux':
+            chrome_options.add_argument('--no-sandbox')
+            chrome_options.add_argument('--disable-dev-shm-usage')
+        elif system == 'darwin':  # macOS
+            chrome_options.add_argument('--disable-web-security')
+        elif system == 'windows':
+            chrome_options.add_argument('--disable-web-security')
         
         # 자동화 탐지 회피
         chrome_options.add_argument('--disable-blink-features=AutomationControlled')
@@ -71,8 +75,9 @@ class WebCrawler:
         chrome_options.page_load_strategy = 'normal'
         
         try:
-            # 시스템 chromedriver 사용 (Chromium 142용)
-            service = Service(executable_path='/home/kajj8808/bin/chromedriver')
+            # webdriver-manager로 자동 ChromeDriver 관리
+            from webdriver_manager.chrome import ChromeDriverManager
+            service = Service(ChromeDriverManager().install())
             self.driver = webdriver.Chrome(service=service, options=chrome_options)
             
 # 자동화 탐지 우회
