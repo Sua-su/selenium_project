@@ -15,6 +15,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 from typing import Optional, Dict, List
 import time
 import re
+import platform
 from urllib.parse import urlparse
 from cache_manager import get_cache_manager, skip_if_crawled
 
@@ -26,6 +27,7 @@ class HybridCrawler:
         """크롤러 초기화"""
         self.headless = headless
         self.driver = None
+        self.selenium_available = True  # Selenium 사용 가능 여부
         
         # requests 세션 설정
         self.session = requests.Session()
@@ -41,7 +43,9 @@ class HybridCrawler:
             r'.*\.joongang\.co\.kr',
             r'.*\.hankyung\.com',
             r'.*\.news1\.kr',
-            r'.*\.yonhapnews\.com'
+            r'.*\.yonhapnews\.com',
+            r'.*\.yna\.co\.kr',  # 연합뉴스
+            r'.*news\.yna\.co\.kr'  # 연합뉴스 뉴스 도메인
         ]
     
     def is_static_page(self, url: str) -> bool:
@@ -62,9 +66,7 @@ class HybridCrawler:
         if self.headless:
             chrome_options.add_argument('--headless=new')
         
-        # Linux 환경 최적화
-        chrome_options.add_argument('--no-sandbox')
-        chrome_options.add_argument('--disable-dev-shm-usage')
+        # 공통 옵션 (모든 플랫폼)
         chrome_options.add_argument('--disable-gpu')
         chrome_options.add_argument('--disable-extensions')
         chrome_options.add_argument('--disable-plugins')
@@ -73,7 +75,6 @@ class HybridCrawler:
         chrome_options.add_argument('--allow-running-insecure-content')
         chrome_options.add_argument('--disable-features=VizDisplayCompositor')
         chrome_options.add_argument('--disable-ipc-flooding-protection')
-        chrome_options.add_argument('--remote-debugging-port=9222')
         chrome_options.add_argument('--disable-background-timer-throttling')
         chrome_options.add_argument('--disable-backgrounding-occluded-windows')
         chrome_options.add_argument('--disable-renderer-backgrounding')
@@ -83,12 +84,23 @@ class HybridCrawler:
         chrome_options.add_argument('--log-level=3')
         chrome_options.add_argument('--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36')
         
+        # 플랫폼별 옵션
+        system = platform.system().lower()
+        if system == 'linux':
+            chrome_options.add_argument('--no-sandbox')
+            chrome_options.add_argument('--disable-dev-shm-usage')
+        elif system == 'darwin':  # macOS
+            chrome_options.add_argument('--disable-web-security')
+        elif system == 'windows':
+            chrome_options.add_argument('--disable-web-security')
+        
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
         chrome_options.add_experimental_option('useAutomationExtension', False)
         chrome_options.page_load_strategy = 'eager'  # interactive보다 빠름
         
         try:
-            service = Service(executable_path='/home/kajj8808/bin/chromedriver')
+            from webdriver_manager.chrome import ChromeDriverManager
+            service = Service(ChromeDriverManager().install())
             self.driver = webdriver.Chrome(service=service, options=chrome_options)
             
             # 자동화 탐지 우회
@@ -105,7 +117,9 @@ class HybridCrawler:
             
         except Exception as e:
             print(f"드라이버 초기화 오류: {str(e)}")
-            raise
+            print("Selenium 모드 실패, requests-only 모드로 전환")
+            self.selenium_available = False
+            # 예외를 발생시키지 않고 계속 진행
     
     def close_driver(self):
         """드라이버 종료"""
@@ -139,12 +153,20 @@ class HybridCrawler:
     
     def get_dynamic_html(self, url: str, wait_time: int = 1) -> Optional[str]:
         """Selenium으로 동적 페이지 HTML 가져오기"""
+        # Selenium이 사용 불가능한 경우 즉시 None 반환
+        if not self.selenium_available:
+            return None
+            
         max_retries = 2
         
         for attempt in range(max_retries):
             try:
                 if self.driver is None:
                     self.init_driver()
+                
+                # 드라이버가 여전히 None인 경우
+                if self.driver is None:
+                    return None
                 
                 self.driver.get(url)
                 
