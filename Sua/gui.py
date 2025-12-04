@@ -25,10 +25,16 @@ class CrawlerGUI:
         self.root.title("RSS 기사 크롤러")
         self.root.geometry("1200x800")
         
-        # 모듈 초기화
-        self.db = DatabaseManager()
-        self.rss_parser = RSSParser()
-        self.crawler = None
+        # 모듈 초기화 (Windows 환경 에러 핸들링 추가)
+        try:
+            self.db = DatabaseManager()
+            self.rss_parser = RSSParser()
+            self.crawler = None
+            print("✅ 모듈 초기화 성공")
+        except Exception as e:
+            print(f"❌ 모듈 초기화 오류: {str(e)}")
+            messagebox.showerror("초기화 오류", f"프로그램 초기화 중 오류가 발생했습니다:\n\n{str(e)}\n\n프로그램을 종료합니다.")
+            return
         
         # 크롤링 진행 상태
         self.is_crawling = False
@@ -36,8 +42,13 @@ class CrawlerGUI:
         # GUI 구성
         self.setup_ui()
         
-        # 초기 데이터 로드
-        self.load_articles()
+        # 초기 데이터 로드 (Windows 환경 에러 핸들링 추가)
+        try:
+            self.load_articles()
+            print("✅ 초기 데이터 로드 성공")
+        except Exception as e:
+            print(f"❌ 초기 데이터 로드 오류: {str(e)}")
+            # 데이터 로드 실패해도 프로그램은 계속 실행됨
     
     def setup_ui(self):
         """UI 구성"""
@@ -310,17 +321,21 @@ class CrawlerGUI:
             successful_articles = []  # 배치 저장을 위한 리스트
             
             try:
+                # 크롤러 인스턴스 생성 (하나만 사용)
+                crawler = HybridCrawler(headless=True)
+                
                 # 병렬 처리를 위한 함수
                 def crawl_single(url_info):
                     index, url = url_info
-                    result = HybridCrawler(headless=True).crawl_article(url, wait_time)
+                    result = crawler.crawl_article(url, wait_time)
                     return index, result
                 
                 # URL을 인덱스와 함께 묶음
                 url_with_index = [(i, url) for i, url in enumerate(urls, 1)]
                 
-                # ThreadPoolExecutor로 병렬 처리 (최대 4개 워커로 조정)
-                with ThreadPoolExecutor(max_workers=4) as executor:
+                # ThreadPoolExecutor로 병렬 처리 (번들 환경에서는 1개 워커로 조정)
+                max_workers = 1  # 번들 환경에서는 단일 스레드로
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
                     # 모든 작업 제출
                     future_to_index = {
                         executor.submit(crawl_single, url_info): url_info[0] 

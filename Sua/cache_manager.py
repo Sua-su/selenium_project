@@ -17,8 +17,20 @@ class CacheManager:
     
     def __init__(self, cache_dir: str = "cache", db_path: str = "cache.db"):
         """캐시 관리자 초기화"""
-        self.cache_dir = cache_dir
-        self.db_path = db_path
+        # Windows 환경에서의 경로 문제 해결
+        import sys
+        import os
+        
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            # PyInstaller 빌드 환경: 실행 파일 위치에 캐시 생성
+            base_path = sys._MEIPASS
+            self.cache_dir = os.path.join(base_path, cache_dir)
+            self.db_path = os.path.join(base_path, db_path)
+            print(f"Windows 환경: 캐시 경로를 {self.cache_dir}로 설정")
+        else:
+            # 개발 환경
+            self.cache_dir = cache_dir
+            self.db_path = db_path
         
         # 캐시 디렉토리 생성
         os.makedirs(cache_dir, exist_ok=True)

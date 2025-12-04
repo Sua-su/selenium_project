@@ -17,7 +17,19 @@ class DatabaseManager:
         Args:
             db_path: 데이터베이스 파일 경로
         """
-        self.db_path = db_path
+        # Windows 환경에서의 경로 문제 해결
+        import sys
+        import os
+        
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            # PyInstaller 빌드 환경: 실행 파일 위치에 DB 생성
+            base_path = sys._MEIPASS
+            self.db_path = os.path.join(base_path, db_path)
+            print(f"Windows 환경: DB 경로를 {self.db_path}로 설정")
+        else:
+            # 개발 환경
+            self.db_path = db_path
+            
         self.init_database()
     
     def init_database(self):
