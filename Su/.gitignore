@@ -1,0 +1,40 @@
+# RSS Crawler 프로젝트 파일
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+
+# 가상 환경
+venv/
+env/
+ENV/
+.venv
+
+# PyInstaller 빌드 파일
+build/
+dist/
+*.spec
+
+# 데이터베이스
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
+# 로그 파일
+*.log
+
+# 테스트
+.pytest_cache/
+.coverage
+htmlcov/
