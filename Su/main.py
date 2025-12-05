@@ -4,6 +4,9 @@ from gui import CrawlerGUI
 
 
 def main():
+    """
+    tkinter GUI를 초기화하고 실행
+    """
     try:
         root = tk.Tk()
         app = CrawlerGUI(root)

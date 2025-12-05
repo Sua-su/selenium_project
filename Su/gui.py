@@ -1,8 +1,3 @@
-"""
-GUI 애플리케이션 모듈
-tkinter 기반 사용자 인터페이스
-"""
-
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
 import threading
@@ -16,11 +11,6 @@ class CrawlerGUI:
     """크롤러 GUI 메인 클래스"""
     
     def __init__(self, root):
-        """GUI 초기화
-        
-        Args:
-            root: tkinter 루트 윈도우
-        """
         self.root = root
         self.root.title("RSS 기사 크롤러")
         self.root.geometry("1200x800")
@@ -39,32 +29,34 @@ class CrawlerGUI:
         # 초기 데이터 로드
         self.load_articles()
     
+
+
     def setup_ui(self):
-        """UI 구성"""
+        
         # 탭 컨트롤 생성
         self.tab_control = ttk.Notebook(self.root)
         
-        # 탭 1: 크롤링
+        # 탭 1
         self.tab_crawl = ttk.Frame(self.tab_control)
         self.tab_control.add(self.tab_crawl, text="크롤링")
         
-        # 탭 2: 데이터 확인
+        # 탭 2
         self.tab_view = ttk.Frame(self.tab_control)
         self.tab_control.add(self.tab_view, text="데이터 확인")
         
-        # 탭 3: 데이터 관리
+        # 탭 3
         self.tab_manage = ttk.Frame(self.tab_control)
         self.tab_control.add(self.tab_manage, text="데이터 관리")
         
         self.tab_control.pack(expand=1, fill="both")
         
-        # 각 탭 설정
+        # 설정
         self.setup_crawl_tab()
         self.setup_view_tab()
         self.setup_manage_tab()
     
     def setup_crawl_tab(self):
-        """크롤링 탭 구성"""
+        
         # RSS 피드 섹션
         rss_frame = ttk.LabelFrame(self.tab_crawl, text="RSS 피드 설정", padding=10)
         rss_frame.pack(fill="x", padx=10, pady=5)
@@ -131,7 +123,8 @@ class CrawlerGUI:
         self.progress_bar = ttk.Progressbar(crawl_frame, mode="determinate")
         self.progress_bar.pack(fill="x", pady=5)
         
-        # 로그
+        
+
         log_frame = ttk.LabelFrame(self.tab_crawl, text="실행 로그", padding=10)
         log_frame.pack(fill="both", expand=True, padx=10, pady=5)
         
@@ -139,7 +132,6 @@ class CrawlerGUI:
         self.log_text.pack(fill="both", expand=True)
     
     def setup_view_tab(self):
-        """데이터 확인 탭 구성"""
         # 검색 섹션
         search_frame = ttk.Frame(self.tab_view, padding=10)
         search_frame.pack(fill="x")
@@ -153,11 +145,11 @@ class CrawlerGUI:
         ttk.Button(search_frame, text="전체보기", command=self.load_articles).pack(side="left", padx=2)
         ttk.Button(search_frame, text="새로고침", command=self.load_articles).pack(side="left", padx=2)
         
-        # 기사 목록 (Treeview)
+        # 기사 목록 
         list_frame = ttk.Frame(self.tab_view)
         list_frame.pack(fill="both", expand=True, padx=10, pady=5)
         
-        # Treeview 생성
+        # Treeview
         columns = ("ID", "제목", "출처", "수집일")
         self.article_tree = ttk.Treeview(list_frame, columns=columns, show="tree headings", selectmode="browse")
         
@@ -214,6 +206,10 @@ class CrawlerGUI:
         # 초기 통계 로드
         self.update_statistics()
     
+
+
+
+
     # === 크롤링 탭 메서드 ===
     
     def parse_rss(self):
@@ -280,6 +276,15 @@ class CrawlerGUI:
         self.url_listbox.delete(0, tk.END)
         self.log(f"전체 URL 삭제: {count}개")
     
+
+
+
+
+
+
+
+
+
     def start_crawling(self):
         """크롤링 시작"""
         if self.is_crawling:
@@ -305,12 +310,14 @@ class CrawlerGUI:
         self.progress_bar["maximum"] = url_count
         self.progress_bar["value"] = 0
         
+
+
         def crawl_thread():
             success_count = 0
-            successful_articles = []  # 배치 저장을 위한 리스트
+            successful_articles = []  # 순서
             
             try:
-                # 병렬 처리를 위한 함수
+                # 초기
                 def crawl_single(url_info):
                     index, url = url_info
                     result = HybridCrawler(headless=True).crawl_article(url, wait_time)
@@ -319,9 +326,9 @@ class CrawlerGUI:
                 # URL을 인덱스와 함께 묶음
                 url_with_index = [(i, url) for i, url in enumerate(urls, 1)]
                 
-                # ThreadPoolExecutor로 병렬 처리 (최대 4개 워커로 조정)
+                # 병렬 처리
                 with ThreadPoolExecutor(max_workers=4) as executor:
-                    # 모든 작업 제출
+                    
                     future_to_index = {
                         executor.submit(crawl_single, url_info): url_info[0] 
                         for url_info in url_with_index
@@ -331,8 +338,8 @@ class CrawlerGUI:
                     for future in as_completed(future_to_index):
                         index, result = future.result()
                         
-                        # GUI 업데이트 (배치 업데이트로 성능 향상)
-                        if index % 5 == 0 or index == url_count:  # 5개마다 또는 마지막에 업데이트
+                        # GUI 록그창 
+                        if index % 5 == 0 or index == url_count:
                             self.root.after(0, lambda i=index: self.progress_label.config(text=f"진행 중: {i}/{url_count}"))
                             self.root.after(0, lambda i=index, u=result['url']: self.log(f"[{i}/{url_count}] 크롤링: {u}"))
                         
@@ -370,7 +377,7 @@ class CrawlerGUI:
                 self.is_crawling = False
                 self.root.after(0, lambda: self.crawl_btn.config(state="normal"))
                 
-                # 배치 저장
+                # success 저장 db
                 if successful_articles:
                     batch_saved = self.db.batch_insert_articles(successful_articles)
                     self.root.after(0, lambda b=batch_saved: self.log(f"배치 저장 완료: {b}개 기사"))
@@ -388,7 +395,9 @@ class CrawlerGUI:
         self.log_text.insert(tk.END, f"{message}\n")
         self.log_text.see(tk.END)
     
-    # === 데이터 확인 탭 메서드 ===
+
+
+    """ 데이터 확인 탭 표 그리기 ... """
     
     def load_articles(self):
         """기사 목록 로드"""
@@ -475,7 +484,6 @@ URL: {article['url']}
         text_widget.insert(tk.END, content)
         text_widget.config(state="disabled")
     
-    # === 데이터 관리 탭 메서드 ===
     
     def update_statistics(self):
         """통계 정보 업데이트"""

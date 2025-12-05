@@ -6,26 +6,34 @@ import time
 
 
 class RSSParser:
+    
     def __init__(self):
+        """RSS 파서 초기화"""
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
     
     def parse_feed(self, rss_url: str) -> List[Dict]:
+        """
+        단일 RSS 피드 파싱
+        """
         try:
             response = requests.get(rss_url, headers=self.headers, timeout=10, allow_redirects=True)
             
+            #인터넷 연결
             if response.status_code != 200:
                 print(f"HTTP 오류: {response.status_code} - {rss_url}")
                 return []
             
+
             content_type = response.headers.get('content-type', '').lower()
             if 'xml' not in content_type and 'rss' not in content_type:
                 print(f"잘못된 Content-Type: {content_type} - {rss_url}")
-                return []
+                return []   
             
             feed = feedparser.parse(response.content)
             
+            #xml 문법 오류
             if feed.bozo:
                 print(f"RSS 파싱 오류: {feed.bozo_exception} - {rss_url}")
             
@@ -33,6 +41,8 @@ class RSSParser:
                 print(f"기사가 없음: {rss_url}")
                 return []
             
+
+
             articles = []
             for entry in feed.entries:
                 article = {
@@ -58,7 +68,11 @@ class RSSParser:
             print(f"RSS 파싱 오류: {str(e)} - {rss_url}")
             return []
     
+
     def parse_multiple_feeds(self, rss_urls: List[str]) -> List[Dict]:
+        """
+        여러 RSS 피드 파싱
+        """
         all_articles = []
         
         for rss_url in rss_urls:
@@ -66,14 +80,17 @@ class RSSParser:
             articles = self.parse_feed(rss_url)
             if articles:
                 all_articles.extend(articles)
-                print(f"  ✓ {len(articles)}개 기사 수집")
+                print(f"  {len(articles)}개 기사 수집")
             else:
-                print(f"  ✗ 실패 또는 기사 없음")
-            time.sleep(1)
+                print(f"   실패 또는 기사 없음")
+            time.sleep(1) #디도스 오인 x 코드 
         
         return all_articles
-    
+
+
+
     def _parse_date(self, entry) -> str:
+    
         date_fields = ['published_parsed', 'updated_parsed', 'created_parsed']
         
         for field in date_fields:
@@ -88,18 +105,25 @@ class RSSParser:
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     def _extract_tags(self, entry) -> str:
+        """
+        RSS 엔트리에서 태그 추출
+        """
         tags = []
         
         if hasattr(entry, 'tags'):
             for tag in entry.tags:
-                if isinstance(tag, dict) and 'term' in tag:
+                if isinstance(tag, dict) and 'term' in tag: #딕셔너리만 처리하도록
                     tags.append(tag['term'])
                 elif isinstance(tag, str):
                     tags.append(tag)
         
         return ', '.join(tags) if tags else ''
     
+    
     def get_feed_info(self, rss_url: str) -> Dict:
+        """
+        피드 메타 정보 조회
+        """
         try:
             feed = feedparser.parse(rss_url)
             
@@ -117,6 +141,7 @@ class RSSParser:
             return {}
 
 
+# 샘플 RSS 피드 목록
 SAMPLE_RSS_FEEDS = [
     "https://www.hani.co.kr/rss/",
     "https://www.mk.co.kr/rss/30000001/",

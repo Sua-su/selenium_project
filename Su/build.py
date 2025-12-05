@@ -20,7 +20,8 @@ def build_executable():
         f'--distpath={os.path.join(current_dir, "dist")}',
         f'--workpath={os.path.join(current_dir, "build")}',
         f'--specpath={current_dir}',
-        # 필수 모듈 명시적 포함
+        # 필수 모듈 
+
         '--hidden-import=selenium',
         '--hidden-import=selenium.webdriver',
         '--hidden-import=selenium.webdriver.chrome.service',
@@ -32,7 +33,6 @@ def build_executable():
         '--hidden-import=requests',
         '--hidden-import=urllib3',
         '--hidden-import=certifi',
-        # SSL 인증서 파일 포함
         '--collect-all=certifi',
         '--collect-all=selenium',
         # 데이터 파일 수집
