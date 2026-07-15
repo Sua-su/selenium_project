@@ -9,6 +9,7 @@ RSS 피드를 통해 URL을 수집하고, Selenium으로 동적 웹페이지를 
 - **RSS 파싱**: RSS 피드에서 URL 목록 수집
 - **동적 렌더링**: Selenium으로 JavaScript 기반 페이지 로딩
 - **본문 추출**: trafilatura로 깨끗한 텍스트 콘텐츠 추출
+- **AI 요약**: 크롤링 직후 로컬 LLM(llama-cpp-python)으로 기사 요약 자동 생성
 - **데이터 저장**: SQLite 데이터베이스에 체계적 저장
 - **GUI**: 검색, 데이터 확인, 관리 기능이 있는 사용자 인터페이스
 
@@ -34,6 +35,18 @@ source .venv/bin/activate
 python main.py
 ```
 
+### 3. 요약용 로컬 LLM 모델 다운로드
+
+`summary` 기능은 Qwen2.5-3B-Instruct GGUF 모델을 로컬에서 실행합니다. 용량(약 2GB)이 커서 저장소에는 포함되어 있지 않으니 최초 1회 아래처럼 받아두세요.
+
+```bash
+mkdir -p models
+curl -L -o models/qwen2.5-3b-instruct-q4_k_m.gguf \
+  "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf"
+```
+
+모델 파일이 없으면 크롤링/요약 자체는 실패하지 않고 `summary` 값만 비어 있게 됩니다.
+
 ## EXE 파일 빌드
 
 ```bash
@@ -48,6 +61,8 @@ Sua/
 ├── database.py          # SQLite 데이터베이스 관리
 ├── rss_parser.py        # RSS 피드 파싱
 ├── crawler.py           # Selenium + trafilatura 크롤러
+├── summarizer.py        # 로컬 LLM(GGUF) 기반 기사 요약
+├── models/               # 요약용 GGUF 모델 파일 (git 미포함)
 ├── gui.py               # tkinter GUI 인터페이스
 ├── test_setup.py        # 환경 설정 테스트
 ├── requirements.txt     # 패키지 의존성
@@ -63,6 +78,7 @@ Sua/
 - **Selenium** - 동적 웹페이지 렌더링
 - **feedparser** - RSS 피드 파싱
 - **webdriver-manager** - ChromeDriver 자동 관리
+- **llama-cpp-python** - 로컬 LLM(GGUF) 추론, 기사 요약
 - **SQLite** - 로컬 데이터베이스
 - **tkinter** - GUI 프레임워크
 
@@ -80,6 +96,7 @@ Sua/
 - `source` - 출처
 - `rss_feed` - RSS 피드 URL
 - `tags` - 태그
+- `summary` - 로컬 LLM이 생성한 요약
 
 ## GUI 기능
 

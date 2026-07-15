@@ -41,12 +41,18 @@ class DatabaseManager:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
-        
+
         # 인덱스 생성
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_url ON articles(url)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_source ON articles(source)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_collected_date ON articles(collected_date)')
-        
+
+        # summary 컬럼 마이그레이션 (기존 DB 호환)
+        cursor.execute("PRAGMA table_info(articles)")
+        existing_columns = {row[1] for row in cursor.fetchall()}
+        if 'summary' not in existing_columns:
+            cursor.execute('ALTER TABLE articles ADD COLUMN summary TEXT')
+
         conn.commit()
         conn.close()
     
@@ -56,9 +62,10 @@ class DatabaseManager:
     
     def insert_article(self, url: str, title: str = None, content: str = None,
                       author: str = None, published_date: str = None,
-                      source: str = None, rss_feed: str = None, tags: str = None) -> bool:
+                      source: str = None, rss_feed: str = None, tags: str = None,
+                      summary: str = None) -> bool:
         """새로운 기사 저장
-        
+
         Args:
             url: 기사 URL (필수)
             title: 기사 제목
@@ -68,21 +75,22 @@ class DatabaseManager:
             source: 출처
             rss_feed: RSS 피드 URL
             tags: 태그 (쉼표로 구분)
-            
+            summary: 로컬 LLM이 생성한 요약
+
         Returns:
             저장 성공 여부
         """
         conn = self.get_connection()
         cursor = conn.cursor()
-        
+
         collected_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
+
         try:
             cursor.execute('''
-                INSERT INTO articles 
-                (url, title, content, author, published_date, collected_date, source, rss_feed, tags)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (url, title, content, author, published_date, collected_date, source, rss_feed, tags))
+                INSERT INTO articles
+                (url, title, content, author, published_date, collected_date, source, rss_feed, tags, summary)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (url, title, content, author, published_date, collected_date, source, rss_feed, tags, summary))
             
             conn.commit()
             return True
@@ -125,15 +133,16 @@ class DatabaseManager:
                 collected_date,
                 article.get('source', ''),
                 article.get('rss_feed', ''),
-                article.get('tags', '')
+                article.get('tags', ''),
+                article.get('summary', '')
             ))
-        
+
         try:
             # 일괄 삽입
             cursor.executemany('''
-                INSERT OR IGNORE INTO articles 
-                (url, title, content, author, published_date, collected_date, source, rss_feed, tags)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT OR IGNORE INTO articles
+                (url, title, content, author, published_date, collected_date, source, rss_feed, tags, summary)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', data_to_insert)
             
             conn.commit()
@@ -159,9 +168,9 @@ class DatabaseManager:
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT id, url, title, content, author, published_date, 
-                   collected_date, source, rss_feed, tags
-            FROM articles 
+            SELECT id, url, title, content, author, published_date,
+                   collected_date, source, rss_feed, tags, summary
+            FROM articles
             ORDER BY collected_date DESC
             LIMIT ? OFFSET ?
         ''', (limit, offset))
@@ -178,7 +187,8 @@ class DatabaseManager:
                 'collected_date': row[6],
                 'source': row[7],
                 'rss_feed': row[8],
-                'tags': row[9]
+                'tags': row[9],
+                'summary': row[10]
             })
         
         conn.close()
@@ -197,9 +207,9 @@ class DatabaseManager:
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT id, url, title, content, author, published_date, 
-                   collected_date, source, rss_feed, tags
-            FROM articles 
+            SELECT id, url, title, content, author, published_date,
+                   collected_date, source, rss_feed, tags, summary
+            FROM articles
             WHERE id = ?
         ''', (article_id,))
         
@@ -217,9 +227,10 @@ class DatabaseManager:
                 'collected_date': row[6],
                 'source': row[7],
                 'rss_feed': row[8],
-                'tags': row[9]
+                'tags': row[9],
+                'summary': row[10]
             }
-        
+
         return None
     
     def search_articles(self, keyword: str, limit: int = 100) -> List[Dict]:
@@ -237,9 +248,9 @@ class DatabaseManager:
         
         search_pattern = f"%{keyword}%"
         cursor.execute('''
-            SELECT id, url, title, content, author, published_date, 
-                   collected_date, source, rss_feed, tags
-            FROM articles 
+            SELECT id, url, title, content, author, published_date,
+                   collected_date, source, rss_feed, tags, summary
+            FROM articles
             WHERE title LIKE ? OR content LIKE ?
             ORDER BY collected_date DESC
             LIMIT ?
@@ -257,7 +268,8 @@ class DatabaseManager:
                 'collected_date': row[6],
                 'source': row[7],
                 'rss_feed': row[8],
-                'tags': row[9]
+                'tags': row[9],
+                'summary': row[10]
             })
         
         conn.close()
@@ -348,9 +360,9 @@ class DatabaseManager:
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT id, url, title, content, author, published_date, 
-                   collected_date, source, rss_feed, tags
-            FROM articles 
+            SELECT id, url, title, content, author, published_date,
+                   collected_date, source, rss_feed, tags, summary
+            FROM articles
             WHERE source = ?
             ORDER BY collected_date DESC
             LIMIT ?
@@ -368,7 +380,8 @@ class DatabaseManager:
                 'collected_date': row[6],
                 'source': row[7],
                 'rss_feed': row[8],
-                'tags': row[9]
+                'tags': row[9],
+                'summary': row[10]
             })
         
         conn.close()
@@ -389,9 +402,9 @@ class DatabaseManager:
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT id, url, title, content, author, published_date, 
-                   collected_date, source, rss_feed, tags
-            FROM articles 
+            SELECT id, url, title, content, author, published_date,
+                   collected_date, source, rss_feed, tags, summary
+            FROM articles
             WHERE DATE(collected_date) BETWEEN ? AND ?
             ORDER BY collected_date DESC
             LIMIT ?
@@ -409,7 +422,8 @@ class DatabaseManager:
                 'collected_date': row[6],
                 'source': row[7],
                 'rss_feed': row[8],
-                'tags': row[9]
+                'tags': row[9],
+                'summary': row[10]
             })
         
         conn.close()

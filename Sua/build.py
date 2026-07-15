@@ -32,12 +32,16 @@ def build_executable():
         '--hidden-import=requests',
         '--hidden-import=urllib3',
         '--hidden-import=certifi',
+        '--hidden-import=llama_cpp',
         # SSL 인증서 파일 포함
         '--collect-all=certifi',
         '--collect-all=selenium',
+        '--collect-all=llama_cpp',
         # 데이터 파일 수집
         '--copy-metadata=selenium',
         '--copy-metadata=trafilatura',
+        # 요약 모델 파일(GGUF) 포함
+        f'--add-data={os.path.join(current_dir, "models")}{os.pathsep}models',
     ]
     
     

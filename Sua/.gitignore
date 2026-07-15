@@ -21,6 +21,9 @@ dist/
 *.sqlite
 *.sqlite3
 
+# 요약용 LLM 모델 (용량이 커서 git 미포함, README 참고해 직접 다운로드)
+models/*.gguf
+
 # IDE
 .vscode/
 .idea/

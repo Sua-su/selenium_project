@@ -346,13 +346,16 @@ class CrawlerGUI:
                                 'published_date': result.get('published_date', ''),
                                 'source': result.get('source', ''),
                                 'rss_feed': '',
-                                'tags': ''
+                                'tags': '',
+                                'summary': result.get('summary', '')
                             })
-                            
+
                             success_count += 1
                             method = result.get('method', 'unknown')
                             title = result.get('title', 'No title')[:50]
-                            self.root.after(0, lambda t=title, m=method: self.log(f"✓ {m}: {t}"))
+                            has_summary = bool(result.get('summary'))
+                            summary_tag = " (요약 완료)" if has_summary else " (요약 없음)"
+                            self.root.after(0, lambda t=title, m=method, s=summary_tag: self.log(f"✓ {m}: {t}{s}"))
                         else:
                             error = result.get('error', 'Unknown error')
                             method = result.get('method', 'unknown')
@@ -467,6 +470,10 @@ URL: {article['url']}
 게시일: {article['published_date'] or '게시일 없음'}
 수집일: {article['collected_date']}
 태그: {article['tags'] or '태그 없음'}
+
+{'='*80}
+[AI 요약]
+{article.get('summary') or '요약 없음'}
 
 {'='*80}
 

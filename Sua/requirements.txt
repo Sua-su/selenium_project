@@ -4,3 +4,4 @@ feedparser>=6.0.10
 webdriver-manager>=4.0.1
 pyinstaller>=6.0.0
 requests>=2.31.0
+llama-cpp-python>=0.3.0

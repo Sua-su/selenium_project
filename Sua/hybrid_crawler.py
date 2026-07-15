@@ -18,6 +18,7 @@ import re
 import platform
 from urllib.parse import urlparse
 from cache_manager import get_cache_manager, skip_if_crawled
+import summarizer
 
 
 class HybridCrawler:
@@ -284,6 +285,9 @@ class HybridCrawler:
                 'method': method
             }
         
+        # 3단계: 로컬 LLM으로 요약 생성 (실패해도 크롤링 결과에는 영향 없음)
+        summary = summarizer.summarize(extracted['title'], extracted['content'])
+
         return {
             'url': url,
             'success': True,
@@ -293,6 +297,7 @@ class HybridCrawler:
             'published_date': extracted['date'],
             'source': extracted['sitename'],
             'description': extracted['description'],
+            'summary': summary,
             'method': method
         }
     
