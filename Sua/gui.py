@@ -8,8 +8,9 @@ from tkinter import ttk, messagebox, scrolledtext
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from database import DatabaseManager
-from rss_parser import RSSParser, SAMPLE_RSS_FEEDS
+from rss_parser import RSSParser, SAMPLE_RSS_FEEDS, KNOWN_RSS_FEEDS
 from hybrid_crawler import HybridCrawler
+import summarizer
 
 
 class CrawlerGUI:
@@ -69,14 +70,31 @@ class CrawlerGUI:
         rss_frame = ttk.LabelFrame(self.tab_crawl, text="RSS 피드 설정", padding=10)
         rss_frame.pack(fill="x", padx=10, pady=5)
         
-        ttk.Label(rss_frame, text="RSS URL:").pack(anchor="w")
+        # 언론사 선택 (URL 직접 입력 없이 등록)
+        ttk.Label(rss_frame, text="언론사 선택:").pack(anchor="w")
+        outlet_frame = ttk.Frame(rss_frame)
+        outlet_frame.pack(fill="x", pady=5)
+
+        self.outlet_var = tk.StringVar()
+        outlet_names = [feed["name"] for feed in KNOWN_RSS_FEEDS]
+        self.outlet_combo = ttk.Combobox(
+            outlet_frame, textvariable=self.outlet_var, values=outlet_names,
+            state="readonly", width=30
+        )
+        self.outlet_combo.pack(side="left", padx=(0, 5))
+        if outlet_names:
+            self.outlet_combo.current(0)
+
+        ttk.Button(outlet_frame, text="선택 언론사 등록", command=self.register_selected_outlet).pack(side="left")
+
+        ttk.Label(rss_frame, text="RSS URL:").pack(anchor="w", pady=(10, 0))
         self.rss_url_entry = ttk.Entry(rss_frame, width=80)
         self.rss_url_entry.pack(fill="x", pady=5)
         self.rss_url_entry.insert(0, SAMPLE_RSS_FEEDS[0])
-        
+
         rss_btn_frame = ttk.Frame(rss_frame)
         rss_btn_frame.pack(fill="x")
-        
+
         ttk.Button(rss_btn_frame, text="RSS 파싱", command=self.parse_rss).pack(side="left", padx=5)
         ttk.Button(rss_btn_frame, text="샘플 피드 불러오기", command=self.load_sample_feeds).pack(side="left")
         
@@ -240,6 +258,22 @@ class CrawlerGUI:
         
         threading.Thread(target=parse_thread, daemon=True).start()
     
+    def register_selected_outlet(self):
+        """콤보박스에서 선택한 언론사의 RSS를 URL 입력 없이 바로 등록"""
+        name = self.outlet_var.get()
+        if not name:
+            messagebox.showwarning("경고", "언론사를 선택하세요.")
+            return
+
+        feed = next((f for f in KNOWN_RSS_FEEDS if f["name"] == name), None)
+        if not feed:
+            return
+
+        self.rss_url_entry.delete(0, tk.END)
+        self.rss_url_entry.insert(0, feed["url"])
+        self.log(f"'{name}' RSS 등록 시작...")
+        self.parse_rss()
+
     def load_sample_feeds(self):
         """샘플 RSS 피드 불러오기"""
         self.log("샘플 피드 파싱 시작...")
@@ -457,12 +491,25 @@ class CrawlerGUI:
         detail_window = tk.Toplevel(self.root)
         detail_window.title(f"기사 상세 - ID: {article_id}")
         detail_window.geometry("900x700")
-        
+
+        # 요약 실행 툴바
+        toolbar = ttk.Frame(detail_window, padding=(10, 10, 10, 0))
+        toolbar.pack(fill="x")
+
+        summary_status_var = tk.StringVar(value="")
+        ttk.Label(toolbar, textvariable=summary_status_var).pack(side="right", padx=(0, 10))
+
+        summarize_btn = ttk.Button(toolbar, text="AI 요약 생성/재생성")
+        summarize_btn.pack(side="right")
+
         # 내용 표시
         text_widget = scrolledtext.ScrolledText(detail_window, wrap=tk.WORD)
         text_widget.pack(fill="both", expand=True, padx=10, pady=10)
-        
-        content = f"""
+
+        def render_content():
+            text_widget.config(state="normal")
+            text_widget.delete(1.0, tk.END)
+            content = f"""
 제목: {article['title'] or '제목 없음'}
 URL: {article['url']}
 출처: {article['source'] or '출처 없음'}
@@ -479,8 +526,46 @@ URL: {article['url']}
 
 {article['content'] or '본문 없음'}
 """
-        text_widget.insert(tk.END, content)
-        text_widget.config(state="disabled")
+            text_widget.insert(tk.END, content)
+            text_widget.config(state="disabled")
+
+        render_content()
+
+        def run_summarize():
+            content_text = article.get('content') or ''
+            if not content_text.strip():
+                messagebox.showwarning("경고", "본문이 없어 요약할 수 없습니다.")
+                return
+
+            summarize_btn.config(state="disabled")
+            summary_status_var.set("요약 생성 중... (로컬 LLM, 최대 1분 소요)")
+
+            def worker():
+                error_msg = None
+                try:
+                    new_summary = summarizer.summarize(article.get('title', ''), content_text)
+                except Exception as e:
+                    new_summary = None
+                    error_msg = str(e)
+
+                def done():
+                    summarize_btn.config(state="normal")
+                    if new_summary:
+                        article['summary'] = new_summary
+                        self.db.update_summary(article_id, new_summary)
+                        summary_status_var.set("요약 생성 완료")
+                        render_content()
+                        self.load_articles()
+                    else:
+                        summary_status_var.set("요약 생성 실패")
+                        detail = f"\n({error_msg})" if error_msg else "\n모델 파일(models/*.gguf)이 있는지 확인하세요."
+                        messagebox.showerror("오류", f"요약 생성에 실패했습니다.{detail}")
+
+                self.root.after(0, done)
+
+            threading.Thread(target=worker, daemon=True).start()
+
+        summarize_btn.config(command=run_summarize)
     
     # === 데이터 관리 탭 메서드 ===
     

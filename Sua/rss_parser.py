@@ -178,3 +178,17 @@ SAMPLE_RSS_FEEDS = [
     "https://www.hani.co.kr/rss/",  # 한겨레
     "https://www.mk.co.kr/rss/30000001/",  # 매일경제
 ]
+
+# 언론사 선택 UI용 프리셋 (이름 + RSS URL). 실제 접속/XML 응답 확인 후 등록된 목록.
+KNOWN_RSS_FEEDS = [
+    {"name": "한겨레", "url": "https://www.hani.co.kr/rss/"},
+    {"name": "매일경제", "url": "https://www.mk.co.kr/rss/30000001/"},
+    {"name": "동아일보", "url": "https://rss.donga.com/total.xml"},
+    {"name": "한국경제", "url": "https://www.hankyung.com/feed/all-news"},
+    {"name": "경향신문", "url": "https://www.khan.co.kr/rss/rssdata/total_news.xml"},
+    {"name": "조선일보", "url": "https://www.chosun.com/arc/outboundfeeds/rss/?outputType=xml"},
+    {"name": "연합뉴스", "url": "https://www.yna.co.kr/rss/news.xml"},
+    {"name": "SBS", "url": "https://news.sbs.co.kr/news/SectionRssFeed.do?sectionId=01&plink=RSSREADER"},
+    {"name": "국민일보", "url": "https://www.kmib.co.kr/rss/data/kmibRssAll.xml"},
+    {"name": "머니투데이", "url": "https://rss.mt.co.kr/mt_news.xml"},
+]

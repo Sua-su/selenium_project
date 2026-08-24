@@ -311,12 +311,35 @@ class DatabaseManager:
             'top_sources': top_sources
         }
     
+    def update_summary(self, article_id: int, summary: str) -> bool:
+        """기사 요약 업데이트
+
+        Args:
+            article_id: 기사 ID
+            summary: 새 요약 내용
+
+        Returns:
+            업데이트 성공 여부
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("UPDATE articles SET summary = ? WHERE id = ?", (summary, article_id))
+            conn.commit()
+            return cursor.rowcount > 0
+        except Exception as e:
+            print(f"요약 업데이트 오류: {str(e)}")
+            return False
+        finally:
+            conn.close()
+
     def delete_article(self, article_id: int) -> bool:
         """기사 삭제
-        
+
         Args:
             article_id: 삭제할 기사 ID
-            
+
         Returns:
             삭제 성공 여부
         """
