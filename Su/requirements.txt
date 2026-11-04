@@ -1,0 +1,6 @@
+trafilatura>=1.6.0
+selenium>=4.15.0
+feedparser>=6.0.10
+webdriver-manager>=4.0.1
+pyinstaller>=6.0.0
+requests>=2.31.0
